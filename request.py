@@ -7,15 +7,21 @@ import json
 import time
 import operator
 
-def api_request(authed_session,start_time):
-    # collect events from last 48 hours
+# returns the events and the most recent timestamp of the events
+def api_request(authed_session,start_time,end_time):
+    # collect events
     response = authed_session.get(
         "https://admin.googleapis.com/admin/reports/v1/activity/users/all/applications/TOKEN",
-        params={"startTime": start_time,"maxResults": 1000},
+        params={"startTime": start_time,"endTime": end_time,"maxResults": 1000},
     )
 
+    if "items" not in response.json():
+        print("Please wait until there are more logs")
     # store activity events
     events = response.json()["items"]
+    top_time = events[0]["id"]["time"]
+    dt = datetime.strptime(top_time,'%Y-%m-%dT%H:%M:%S.%fZ')
+    top_time = (dt + timedelta(milliseconds=1)).strftime('%Y-%m-%dT%H:%M:%S.%fZ')
 
     # while the api request has token to second page
     while "nextPageToken" in response.json():
@@ -23,14 +29,14 @@ def api_request(authed_session,start_time):
         # make follow-on request getting the next page of the report
         response = authed_session.get(
             "https://admin.googleapis.com/admin/reports/v1/activity/users/all/applications/TOKEN",
-            params={"startTime": start_time,"maxResults": 1000, "pageToken": nextToken},
+            params={"startTime": start_time,"endTime": end_time,"maxResults": 1000, "pageToken": nextToken},
         )
         # append additional page's activity events
         events.extend(response.json()["items"])
-    return events
+    return events,top_time
 
 
-def load_data(file_name):
+def load_data(file_name,cur_time):
     credentials = Credentials.from_service_account_file(
         "creds.json",
         scopes=["https://www.googleapis.com/auth/admin.reports.audit.readonly"],
@@ -42,12 +48,8 @@ def load_data(file_name):
     if exists(os.path.join(os.getcwd(),'previous_time.txt')):
         with open('previous_time.txt') as f:
             prev_runtime = f.readline()
-        cur_time = datetime.utcnow().isoformat("T")+'Z'
 
-        # log the time subsequent script should pick up from
-        with open('previous_time.txt','w') as f:
-            f.write(cur_time)
-        items = api_request(authed_session,prev_runtime)
+        items,top_time = api_request(authed_session,prev_runtime,cur_time)
                 
         with open(file_name,'w') as f:
             for i in items:
@@ -69,15 +71,6 @@ def load_data(file_name):
             # get previous events file
             with open('previous_activity_file.txt') as in_f:
                 prev_file = in_f.readline()
-            # for f1 in [file_name,prev_file]:
-            #     print(f1)
-            #     with open(f1,'r') as temp_f:
-            #         # result.extend(json.load(temp_f))
-
-            #         result.extend(json.loads(temp_f))
-            # for f1 in [file_name,prev_file]:
-            #     with open(f1) as f:
-            #         result.extend(f)
             for f1 in [file_name,prev_file]:
                 data = [json.loads(line) for line in open(f1, 'r')]
                 result.extend(data)
@@ -87,20 +80,20 @@ def load_data(file_name):
                     json.dump(r,f)
                     f.write('\n') 
         
+        # log the time subsequent script should pick up from
+        with open('previous_time.txt','w') as f:
+            f.write(top_time)
         # log the activity file subsequent script should pick up from
         with open('previous_activity_file.txt','w') as f:
             f.write(file_name)
 
     # if first time script is run
     else:
-        cur_time = datetime.utcnow().isoformat("T")+'Z'
         # 48 hours ago timestamp
-        time_begin = (datetime.utcnow() - timedelta(hours=48)).isoformat("T")+'Z'
+        dt = datetime.strptime(cur_time,'%Y-%m-%dT%H:%M:%S.%fZ')
+        time_begin = (dt - timedelta(hours=48)).strftime('%Y-%m-%dT%H:%M:%S.%fZ')
 
-        # log the time subsequent script should pick up from
-        with open('previous_time.txt','w') as f:
-            f.write(cur_time)
-        items = api_request(authed_session,time_begin)
+        items,top_time = api_request(authed_session,time_begin,cur_time)
 
         # store events from last 48 hours in newline-delimited JSON file
         with open(file_name,'w') as f:
@@ -108,6 +101,9 @@ def load_data(file_name):
                 json.dump(i,f)
                 f.write('\n')
         
+        # log the time subsequent script should pick up from
+        with open('previous_time.txt','w') as f:
+            f.write(top_time)
         # log the activity file subsequent script should pick up from
         with open('previous_activity_file.txt','w') as f:
             f.write(file_name)
@@ -155,7 +151,8 @@ def analyze(file_name):
 def main():
     timestr = time.strftime("%Y%m%d-%H%M%S")
     file_name = timestr + ".json"
-    load_data(file_name)
+    cur_time = datetime.utcnow().isoformat("T")+'Z'
+    load_data(file_name,cur_time)
     analyze(file_name)
 
 if __name__ == "__main__":
