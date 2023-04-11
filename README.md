@@ -1,37 +1,34 @@
 # Take Home problem
 
-## Contents
+## Assumptions
+1. User can uniquely be identified by their profileId
+2. Subsequent runs of the script can append activity log to previous collection or start clean
+3. Get request to Google's Admin Reports API will return consistent data when provided with startTime and endTime parameters
+4. api method which returns the most number of bytes to applications can be calculated by summing all of the bytes used by an api method
+5. Result of the analysis can be printed in the command line
 
-Besides this README, we've included:
 
-1. a credentials file `creds.json`.
-2. starter code `example_request.py` that authenticates with this credential file and makes an example request to the activity api for TOKEN events.
-3. the `requirements.txt` file describing the Python dependencies needed for this starter code to run.
+## Solution Formulation
+1. Collect past 48 hours of activity log and store it in a newline-delimited JSON file
+2. Analyze token activity using dictionary counter
+3. Get the subsequent script run to resume collection from where last collection left off
+4. Minimize miss in between runs by logging file name and most recent timestamp of the latest run of the script
 
-Feel free to use any libraries/sdks as desired.
-Clarity and Correctness of code are what we are looking for.
+## How to Run
+Have Docker installed and running.
 
-## Problems
+Run the following in command line:
+```
+docker build -t obsidian-kazuma .
+```
+```
+docker run -t -i -v $(pwd):/code obsidian-kazuma
+```
 
-### 1. Retrieving TOKEN activity data using Google's Admin Reports API
+For subsequent runs of the script, you will be prompted 
+```
+Do you want to combine activity log with previous run? y/n:
+```
+'y': activity log of the current run will be combined with the last collection. Thus, analysis will contain information from last run
 
-The desired result is a Python script that retrieves token activity events from the Google Workspace API.
-
-- The first time this script is run, we should collect events from the last 48 hours.
-  - the results should be stored in a newline-delimited JSON file.
-- Subsequent runs of the script should resume collection from where the last collection left off.
-  - each run should store its events in another newline-delimited JSON file.  
-  - we would like to ensure as best as we can that we do not miss any events between runs.
-  - state can be stored on the local filesystem.
-
-### 2. Analyze token activity
-
-Once 48 hours of data from problem (1.) has been collected:
-
-- Identify the user with the most number of events.
-- Which api method (see `method_name` parameter) has returned the most number of bytes to applications?
-  
-## API Reference
-
-- [https://developers.google.com/admin-sdk/reports/v1/guides/manage-audit-tokens](https://developers.google.com/admin-sdk/reports/v1/guides/manage-audit-tokens)  
-- [https://developers.google.com/admin-sdk/reports/reference/rest/v1/activities/list](https://developers.google.com/admin-sdk/reports/reference/rest/v1/activities/list)  
+'n': opposite of 'y'
